@@ -1,0 +1,147 @@
+<!doctype html><html lang="kk"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><title>TAPMENU</title>
+<style>
+:root{--bg:#080808;--tx:#fff;--ac:#fff;--at:#080808;--card:#171717;--mut:#8a8a8a;--rad:18px;--f:-apple-system,"SF Pro Display",system-ui,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font-family:var(--f);padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+.w{max-width:560px;margin:auto;padding:16px}h1,h2,h3{margin:.4em 0}
+.card{background:var(--card);border-radius:var(--rad);padding:16px;margin:10px 0}
+button,.btn{font:inherit;border:0;border-radius:var(--rad);padding:16px;background:var(--ac);color:var(--at);font-weight:700;width:100%;margin:6px 0;cursor:pointer;display:block;text-align:center;text-decoration:none}
+button.g{background:#262626;color:#fff}button.d{background:#5a1c1c;color:#fff}button.s{width:auto;padding:8px 12px;margin:0;font-size:14px}
+input,select,textarea{width:100%;font:inherit;font-size:16px;background:#101010;color:#fff;border:1px solid #2a2a2a;border-radius:12px;padding:12px;margin:4px 0 8px}
+input[type=color]{height:44px;padding:2px}input[type=checkbox]{width:auto}
+.cv{width:100%;height:180px;object-fit:cover;border-radius:var(--rad)}.logo{width:72px;height:72px;border-radius:50%;object-fit:cover}
+.row{display:flex;gap:8px;align-items:center;justify-content:space-between}.row>*{margin:0}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:6px 0}.chips button{width:auto;white-space:nowrap;padding:10px 16px;background:#262626;color:#fff}.chips button.on{background:var(--ac);color:var(--at)}
+.tag{background:var(--ac);color:var(--at);border-radius:8px;padding:2px 8px;font-size:11px;font-weight:700}
+.mut{color:var(--mut);font-size:14px}.dish{display:flex;gap:12px}.dish img{width:88px;height:88px;object-fit:cover;border-radius:14px}.off{opacity:.4}
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#2a2a2a;color:#fff;padding:12px 20px;border-radius:14px;z-index:9;transition:opacity .3s}
+</style></head><body><div id="app"><div class="w mut">…</div></div><div id="toast" style="opacity:0"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+const SB_URL='https://ayhywgmybvbstghjzedv.supabase.co',SB_KEY='sb_publishable_JKaYc8X9fQpq2dqbABcIDg_vpaaWPN6';
+const sb=supabase.createClient(SB_URL,SB_KEY),$=document.getElementById('app');
+let L=localStorage.getItem('lang')||'kk';
+const T={kk:{menu:'МЕНЮ',wifi:'WI-FI',about:'БІЗ ТУРАЛЫ',back:'Артқа',search:'Іздеу…',all:'Барлығы',na:'Қол жетімсіз',pw:'Құпиясөз',copy:'Көшіру',copied:'Көшірілді',addr:'Мекенжай',hrs:'Жұмыс уақыты',tel:'Телефон',none:'Тағам табылмады'},
+ ru:{menu:'МЕНЮ',wifi:'WI-FI',about:'О НАС',back:'Назад',search:'Поиск…',all:'Все',na:'Нет в наличии',pw:'Пароль',copy:'Копировать',copied:'Скопировано',addr:'Адрес',hrs:'Часы работы',tel:'Телефон',none:'Ничего не найдено'}};
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const url=s=>/^https?:\/\//.test(s||'')?esc(s):'#';
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.opacity=1;clearTimeout(t.h);t.h=setTimeout(()=>t.style.opacity=0,2800)}
+async function run(p,ok='Saved'){try{const r=await p;if(r.error)throw r.error;toast('✓ '+ok);return r}catch(e){toast('⚠ '+(e.message||e));return null}}
+function theme(t){const s=document.documentElement.style;t=t||{};s.setProperty('--bg',t.bg||'#080808');s.setProperty('--tx',t.tx||'#fff');s.setProperty('--ac',t.ac||'#fff');s.setProperty('--at',t.at||'#080808');s.setProperty('--rad',(t.rad??18)+'px');s.setProperty('--f',t.font||'-apple-system,"SF Pro Display",system-ui,sans-serif')}
+const FONTS={'System':'-apple-system,system-ui,sans-serif','Serif':'Georgia,serif','Mono':'ui-monospace,Menlo,monospace','Rounded':'"Avenir Next",ui-rounded,sans-serif'};
+
+/* ---------- PUBLIC SITE ---------- */
+async function pub(slug){
+ const {data:r}=await sb.from('restaurants').select('*').eq('slug',slug).maybeSingle();
+ if(!r){$.innerHTML='<div class=w><h2>404</h2><p class=mut>Restaurant not found</p></div>';return}
+ let th=r.theme||{};
+ if(new URLSearchParams(location.search).get('preview')&&(await sb.auth.getSession()).data.session)th=r.draft_theme||{};
+ theme(th);document.title=r.name_kk||r.name_ru||'TAPMENU';
+ const [c,d]=await Promise.all([sb.from('categories').select('*').eq('restaurant_id',r.id).order('sort'),sb.from('dishes').select('*').eq('restaurant_id',r.id).order('sort')]);
+ const cats=c.data||[],ds=d.data||[];let v='home',cat=null,q='';
+ const n=(o,k)=>o[k+'_'+L]||o[k+'_kk']||o[k+'_ru']||'',t=k=>T[L][k],hide=th.hide||{};
+ const lang=()=>`<div class=row style="justify-content:flex-end;gap:6px">${['kk','ru'].map(l=>`<button class="s ${l==L?'':'g'}" onclick="P.lang('${l}')">${l=='kk'?'ҚАЗ':'РУС'}</button>`).join('')}</div>`;
+ const back=()=>`<button class=g onclick="P.go('home')">← ${t('back')}</button>`;
+ function listHtml(){const s=q.toLowerCase();const x=ds.filter(i=>(!cat||i.category_id==cat)&&(!s||(i.name_kk+' '+i.name_ru+' '+i.desc_kk+' '+i.desc_ru).toLowerCase().includes(s)));
+  return x.length?x.map(i=>`<div class="card dish ${i.available?'':'off'}">${i.photo_url?`<img src="${esc(i.photo_url)}" loading=lazy alt="">`:''}<div><b>${esc(n(i,'name'))}</b> ${i.badge?`<span class=tag>${i.badge}</span>`:''}<div class=mut>${esc(n(i,'desc'))}</div><b>${Number(i.price).toLocaleString('ru')} ₸</b> ${i.available?'':`<span class=mut>· ${t('na')}</span>`}</div></div>`).join(''):`<p class=mut>${t('none')}</p>`}
+ window.P={lang(l){L=l;localStorage.setItem('lang',l);draw()},go(x){v=x;draw();scrollTo(0,0)},cat(i){cat=i;draw();},
+  q(s){q=s;document.getElementById('list').innerHTML=listHtml()},
+  copy(){navigator.clipboard.writeText(r.wifi_pass||'').then(()=>toast(t('copied')),()=>toast('⚠'))}};
+ function draw(){let h=`<div class=w>${lang()}`;
+  if(v=='home'){h+=`${r.cover_url?`<img class=cv src="${esc(r.cover_url)}" alt="">`:''}<div style="text-align:center;margin-top:-36px">${r.logo_url?`<img class=logo src="${esc(r.logo_url)}" alt="" style="border:3px solid var(--bg)">`:''}<h1>${esc(n(r,'name'))}</h1><p class=mut>${esc(n(r,'desc'))}</p></div>`;
+   [['menu','menu'],['wifi','wifi'],['about','about']].forEach(([k,p])=>{if(!hide[k])h+=`<button style="padding:26px;font-size:18px" onclick="P.go('${p}')">${esc(th['lbl_'+k+'_'+L]||t(k))}</button>`})}
+  if(v=='menu')h+=`${back()}<input placeholder="${t('search')}" oninput="P.q(this.value)" value="${esc(q)}"><div class=chips><button class="${cat?'':'on'}" onclick="P.cat(null)">${t('all')}</button>${cats.map(k=>`<button class="${cat==k.id?'on':''}" onclick="P.cat('${k.id}')">${esc(n(k,'name'))}</button>`).join('')}</div><div id=list>${listHtml()}</div>`;
+  if(v=='wifi')h+=`${back()}<div class=card><p class=mut>WI-FI</p><h2>${esc(r.wifi_name)}</h2><p class=mut>${t('pw')}</p><h2>${esc(r.wifi_pass)}</h2><button onclick="P.copy()">${t('copy')}</button></div>`;
+  if(v=='about'){const lk=[['Instagram',r.instagram],['TikTok',r.tiktok],['2GIS',r.gis],['Google Maps',r.gmaps]].filter(x=>x[1]);
+   h+=`${back()}<div class=card><h2>${esc(n(r,'name'))}</h2><p class=mut>${t('addr')}</p><p>${esc(r.address)}</p><p class=mut>${t('hrs')}</p><p>${esc(r.hours)}</p><p class=mut>${t('tel')}</p><p><a style="color:inherit" href="tel:${esc(r.phone)}">${esc(r.phone)}</a></p></div>${lk.map(([a,b])=>`<a class="btn g" target=_blank rel=noopener href="${url(b)}">${a}</a>`).join('')}`}
+  $.innerHTML=h+'</div>'}
+ draw()}
+
+/* ---------- ADMIN ---------- */
+let me,R,tab='info';
+const F=(k,l,v='',a)=>`<label class=mut>${l}</label>`+(a?`<textarea id=f_${k} rows=3>${esc(v)}</textarea>`:`<input id=f_${k} value="${esc(v)}">`);
+const G=k=>document.getElementById('f_'+k).value.trim();
+const shell=b=>$.innerHTML=`<div class=w><div class=row><h2>TAPMENU</h2><button class="s g" onclick="sb.auth.signOut().then(admin)">Sign out</button></div>${b}</div>`;
+async function admin(){
+ theme();const {data:{session}}=await sb.auth.getSession();
+ if(!session){$.innerHTML=`<div class=w><h2>TAPMENU</h2><div class=card>${F('em','Email')}<label class=mut>Password</label><input id=f_pw type=password><button id=lg>Sign in</button></div></div>`;
+  document.getElementById('lg').onclick=async()=>{const {error}=await sb.auth.signInWithPassword({email:G('em'),password:document.getElementById('f_pw').value});error?toast('⚠ '+error.message):admin()};return}
+ const {data:p}=await sb.from('profiles').select('*').eq('id',session.user.id).single();me=p;
+ if(!p||p.suspended){shell('<p>Access suspended.</p>');return}
+ home()}
+async function home(){
+ const {data:rs}=await sb.from('restaurants').select('id,slug,name_kk,active,created_at').order('created_at',{ascending:false});
+ const cnt=async t=>(await sb.from(t).select('*',{count:'exact',head:true})).count;
+ const adm=me.role=='super_admin';
+ shell(`<div class=row><div class=card style="flex:1"><h2>${rs.length}</h2><span class=mut>Restaurants (${rs.filter(x=>x.active).length} active)</span></div><div class=card style="flex:1"><h2>${await cnt('dishes')}</h2><span class=mut>Dishes</span></div>${adm?`<div class=card style="flex:1"><h2>${await cnt('profiles')}</h2><span class=mut>Accounts</span></div>`:''}</div>
+ ${adm?'<button onclick="newR()">+ Restaurant</button><button class=g onclick="staff()">Staff</button>':''}
+ ${rs.map(x=>`<div class=card onclick="edit('${x.id}')"><b>${esc(x.name_kk||x.slug)}</b> <span class=mut>/${esc(x.slug)} ${x.active?'':'· inactive'}</span></div>`).join('')}`)}
+function newR(){shell(`<button class=g onclick="home()">← Back</button><div class=card>${F('slug','URL slug (a-z, 0-9, -)')}${F('nk','Name (Қазақша)')}${F('nr','Name (Русский)')}<button onclick="addR()">Create</button></div>`)}
+async function addR(){const slug=G('slug').toLowerCase();if(!/^[a-z0-9-]{2,40}$/.test(slug)||slug=='admin')return toast('⚠ Invalid slug');
+ const x=await run(sb.from('restaurants').insert({slug,name_kk:G('nk'),name_ru:G('nr')}).select().single(),'Created');if(x)edit(x.data.id)}
+async function edit(id,t){tab=t||tab;if(!R||R.id!=id)R=(await sb.from('restaurants').select('*').eq('id',id).single()).data;
+ const tabs=['info','menu','design','qr'];
+ shell(`<button class=g onclick="R=null;home()">← ${esc(R.name_kk||R.slug)}</button><div class=chips>${tabs.map(x=>`<button class="${x==tab?'on':''}" onclick="edit('${id}','${x}')">${x}</button>`).join('')}</div><div id=tb></div>`);
+ ({info,menu,design,qr})[tab]()}
+const tb=h=>document.getElementById('tb').innerHTML=h;
+async function upload(file,col){if(!file)return;if(!/^image\/(jpeg|png|webp)$/.test(file.type)||file.size>5e6)return toast('⚠ JPG/PNG/WebP up to 5 MB');
+ const path=`${R.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${file.type.split('/')[1]}`;
+ const u=await run(sb.storage.from('media').upload(path,file),'Uploaded');if(!u)return null;return sb.storage.from('media').getPublicUrl(path).data.publicUrl}
+function info(){const k=['name_kk','name_ru','desc_kk','desc_ru','address','phone','hours','instagram','tiktok','gis','gmaps','wifi_name','wifi_pass'];
+ tb(`<div class=card><p class=mut>URL: ${location.origin}/${esc(R.slug)}</p>${k.map(x=>F(x,x.replace('_',' '),R[x],x.startsWith('desc'))).join('')}
+ <label><input type=checkbox id=f_active ${R.active?'checked':''}> Active</label>
+ <label class=mut>Logo</label><input type=file accept="image/*" onchange="up(this,'logo_url')"><label class=mut>Cover</label><input type=file accept="image/*" onchange="up(this,'cover_url')">
+ <button onclick="saveInfo()">Save</button>${me.role=='super_admin'?'<button class=d onclick="delR()">Delete restaurant</button>':''}</div>`);
+ window.saveInfo=async()=>{const o={};k.forEach(x=>o[x]=G(x));o.active=document.getElementById('f_active').checked;
+  for(const x of ['instagram','tiktok','gis','gmaps'])if(o[x]&&!/^https?:\/\//.test(o[x]))return toast('⚠ '+x+' must start with https://');
+  const r=await run(sb.from('restaurants').update(o).eq('id',R.id).select().single());if(r)R=r.data};
+ window.up=async(el,col)=>{const u=await upload(el.files[0],col);if(u){const r=await run(sb.from('restaurants').update({[col]:u}).eq('id',R.id).select().single());if(r)R=r.data}};
+ window.delR=async()=>{if(confirm('Delete restaurant and ALL its data?')&&await run(sb.from('restaurants').delete().eq('id',R.id),'Deleted')){R=null;home()}}}
+async function menu(){
+ const [c,d]=await Promise.all([sb.from('categories').select('*').eq('restaurant_id',R.id).order('sort'),sb.from('dishes').select('*').eq('restaurant_id',R.id).order('sort')]);
+ const cs=c.data,ds=d.data,mv=(t,a,i,j)=>run(Promise.all([sb.from(t).update({sort:j}).eq('id',a[i].id),sb.from(t).update({sort:i}).eq('id',a[j].id)]).then(r=>r[0]),'Moved').then(menu);
+ tb(`<h3>Categories</h3>${cs.map((x,i)=>`<div class="card row"><span>${esc(x.name_kk)} / ${esc(x.name_ru)}</span><span><button class="s g" onclick="mvC(${i},${i-1})">↑</button> <button class="s g" onclick="mvC(${i},${i+1})">↓</button> <button class="s g" onclick="editC('${x.id}')">Edit</button></span></div>`).join('')}<button class=g onclick="editC()">+ Category</button>
+ <h3>Dishes</h3>${ds.map((x,i)=>`<div class="card row ${x.available?'':'off'}"><span>${esc(x.name_kk)} · ${x.price}₸</span><span><button class="s g" onclick="mvD(${i},${i-1})">↑</button> <button class="s g" onclick="mvD(${i},${i+1})">↓</button> <button class="s g" onclick="editD('${x.id}')">Edit</button></span></div>`).join('')}<button onclick="editD()">+ Dish</button>`);
+ window.mvC=(i,j)=>cs[j]&&mv('categories',cs,i,j);window.mvD=(i,j)=>ds[j]&&mv('dishes',ds,i,j);
+ window.editC=id=>{const x=cs.find(y=>y.id==id)||{};tb(`<div class=card>${F('nk','Name (Қазақша)',x.name_kk)}${F('nr','Name (Русский)',x.name_ru)}<button onclick="svC('${id||''}')">Save</button>${id?`<button class=d onclick="dlC('${id}')">Delete (and its dishes)</button>`:''}<button class=g onclick="menu()">Cancel</button></div>`)};
+ window.svC=async id=>{if(!G('nk')&&!G('nr'))return toast('⚠ Name required');const o={name_kk:G('nk'),name_ru:G('nr'),restaurant_id:R.id};await run(id?sb.from('categories').update(o).eq('id',id):sb.from('categories').insert({...o,sort:cs.length}));menu()};
+ window.dlC=async id=>{if(confirm('Delete?')){await run(sb.from('categories').delete().eq('id',id),'Deleted');menu()}};
+ window.editD=id=>{const x=ds.find(y=>y.id==id)||{};tb(`<div class=card>${F('nk','Name (Қазақша)',x.name_kk)}${F('nr','Name (Русский)',x.name_ru)}${F('dk','Description (Қазақша)',x.desc_kk,1)}${F('dr','Description (Русский)',x.desc_ru,1)}${F('price','Price KZT',x.price)}
+ <label class=mut>Category</label><select id=f_cat>${cs.map(k=>`<option value="${k.id}" ${k.id==x.category_id?'selected':''}>${esc(k.name_kk)}</option>`).join('')}</select>
+ <label class=mut>Label</label><select id=f_badge>${['','NEW','HIT','POPULAR'].map(b=>`<option ${b==x.badge?'selected':''}>${b}</option>`).join('')}</select>
+ <label><input type=checkbox id=f_av ${x.available!==false?'checked':''}> Available</label><label class=mut>Photo</label><input type=file id=f_ph accept="image/*">
+ <button onclick="svD('${id||''}','${esc(x.photo_url||'')}')">Save</button>${id?`<button class=d onclick="dlD('${id}')">Delete</button>`:''}<button class=g onclick="menu()">Cancel</button></div>`)};
+ window.svD=async(id,old)=>{const p=Number(G('price'));if(!(p>=0)||!G('cat'))return toast('⚠ Valid price and category required');let ph=old||null;const f=document.getElementById('f_ph').files[0];if(f){ph=await upload(f);if(!ph)return}
+  const o={restaurant_id:R.id,category_id:G('cat'),name_kk:G('nk'),name_ru:G('nr'),desc_kk:G('dk'),desc_ru:G('dr'),price:p,badge:G('badge')||null,available:document.getElementById('f_av').checked,photo_url:ph};
+  await run(id?sb.from('dishes').update(o).eq('id',id):sb.from('dishes').insert({...o,sort:ds.length}));menu()};
+ window.dlD=async id=>{if(confirm('Delete?')){await run(sb.from('dishes').delete().eq('id',id),'Deleted');menu()}}}
+function design(){const d=R.draft_theme||{},h=d.hide||{};
+ const C=(k,l,def)=>`<label class=mut>${l}</label><input type=color id=f_${k} value="${d[k]||def}">`;
+ tb(`<div class=card><p class=mut>Edits are saved as a draft. Visitors see them only after Publish.</p>${C('bg','Background','#080808')}${C('tx','Text','#ffffff')}${C('ac','Buttons','#ffffff')}${C('at','Button text','#080808')}
+ <label class=mut>Font</label><select id=f_font>${Object.entries(FONTS).map(([n,v])=>`<option value='${v}' ${v==d.font?'selected':''}>${n}</option>`).join('')}</select>
+ <label class=mut>Button roundness (0–40)</label><input id=f_rad type=number min=0 max=40 value="${d.rad??18}">
+ ${['menu','wifi','about'].map(k=>`<label class=mut>${k} button name (kk / ru) — empty = default</label><div class=row><input id=f_${k}_kk value="${esc(d['lbl_'+k+'_kk']||'')}"><input id=f_${k}_ru value="${esc(d['lbl_'+k+'_ru']||'')}"></div><label><input type=checkbox id=f_h_${k} ${h[k]?'checked':''}> Hide ${k}</label>`).join('')}
+ <button onclick="dsave()">Save</button><a class="btn g" target=_blank href="/${esc(R.slug)}?preview=1">Preview</a><button onclick="dpub()">Publish changes</button></div>`);
+ window.dsave=async()=>{const t={hide:{}};['bg','tx','ac','at','font'].forEach(k=>t[k]=G(k));t.rad=Math.min(40,Math.max(0,+G('rad')||0));
+  ['menu','wifi','about'].forEach(k=>{t.hide[k]=document.getElementById('f_h_'+k).checked;['kk','ru'].forEach(l=>t['lbl_'+k+'_'+l]=G(k+'_'+l))});
+  const r=await run(sb.from('restaurants').update({draft_theme:t}).eq('id',R.id).select().single());if(r)R=r.data;return !!r};
+ window.dpub=async()=>{if(!await dsave())return;const r=await run(sb.from('restaurants').update({theme:R.draft_theme}).eq('id',R.id).select().single(),'Published');if(r)R=r.data}}
+function qr(){const u=`${location.origin}/${R.slug}`;tb(`<div class=card style="text-align:center"><div id=qc style="background:#fff;display:inline-block;padding:12px;border-radius:12px"></div><p>${esc(u)}</p><button onclick="navigator.clipboard.writeText('${esc(u)}').then(()=>toast('Copied'))">Copy link</button><button class=g onclick="dlq()">Save QR image</button><p class=mut>NFC: write this URL to the card with NFC Tools.</p></div>`);
+ new QRCode(document.getElementById('qc'),{text:u,width:240,height:240});
+ window.dlq=()=>{const c=document.querySelector('#qc canvas'),a=document.createElement('a');a.href=c.toDataURL('image/png');a.download=R.slug+'-qr.png';a.click()}}
+async function staff(){
+ const [p,s,r]=await Promise.all([sb.from('profiles').select('*').order('email'),sb.from('staff_restaurants').select('*'),sb.from('restaurants').select('id,slug')]);
+ const rn=id=>(r.data.find(x=>x.id==id)||{}).slug;
+ shell(`<button class=g onclick="home()">← Back</button><p class=mut>Create the login in Supabase › Authentication › Users, then it appears here.</p>${p.data.map(u=>`<div class=card><b>${esc(u.email)}</b> <span class=mut>${u.role}${u.suspended?' · suspended':''}</span>
+ ${s.data.filter(x=>x.user_id==u.id).map(x=>`<div class=row><span>${esc(rn(x.restaurant_id))}</span><button class="s d" onclick="unas('${u.id}','${x.restaurant_id}')">Remove</button></div>`).join('')}
+ ${u.role=='staff'?`<select id=as_${u.id}><option value="">Assign restaurant…</option>${r.data.map(x=>`<option value="${x.id}">${esc(x.slug)}</option>`).join('')}</select><div class=row><button class="s" onclick="asg('${u.id}')">Assign</button><button class="s g" onclick="susp('${u.id}',${!u.suspended})">${u.suspended?'Restore':'Suspend'}</button></div>`:''}</div>`).join('')}`);
+ window.asg=async u=>{const v=document.getElementById('as_'+u).value;if(v){await run(sb.from('staff_restaurants').insert({user_id:u,restaurant_id:v}),'Assigned');staff()}};
+ window.unas=async(u,v)=>{await run(sb.from('staff_restaurants').delete().eq('user_id',u).eq('restaurant_id',v),'Removed');staff()};
+ window.susp=async(u,b)=>{await run(sb.from('profiles').update({suspended:b}).eq('id',u));staff()}}
+
+/* ---------- ROUTER ---------- */
+const seg=location.pathname.split('/').filter(Boolean);
+seg[0]=='admin'?admin():seg[0]?pub(seg[0]):$.innerHTML='<div class=w><h1>TAPMENU</h1><p class=mut>NFC digital menus</p></div>';
+</script></body></html>
